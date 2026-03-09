@@ -10,7 +10,13 @@ const NotFound = () => {
       <div className="flex items-center gap-[50px] w-[780px]">
 
         {/* 이미지 카드 */}
-        <div className="bg-gray-100 rounded-2xl p-8 flex items-center justify-center">
+        <div className="relative bg-gray-100 rounded-2xl p-8 flex items-center justify-center">
+
+          {/* 피그마 아이콘 */}
+          <div className="absolute top-3 left-3 w-[48px] h-[48px] border-[4px] border-[#5C8EF2] rounded-md flex items-center justify-center text-[#5C8EF2] font-bold">
+            ?
+          </div>
+
           <img
             src={notFoundImg}
             alt="404"
