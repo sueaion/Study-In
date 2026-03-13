@@ -1,14 +1,15 @@
 import { useState, useEffect } from 'react';
-import { useNavigate, useSearchParams } from 'react-router-dom';
-import { axiosInstance } from '@/api/axios';
+import { useNavigate, useSearchParams, useLocation } from 'react-router-dom';
+import { getStudies } from '@/api/study';
 import { normalizeStudy } from '@/utils/study';
 import StudyCard from '@/features/study/components/StudyCard';
 import type { Study } from '@/types/study';
-import searchIcon from '@/assets/base/icon-Search.svg';
-import leftIcon from '@/assets/base/icon-left.svg';
-import filterIcon from '@/assets/base/icon-filter.svg';
-import triangleUpIcon from '@/assets/base/icon-Triangle-Up.svg';
-import triangleDownIcon from '@/assets/base/icon-Triangle-Down.svg';
+
+import SearchIcon from '@/assets/base/icon-Search.svg?react';
+import LeftIcon from '@/assets/base/icon-left.svg?react';
+import FilterIcon from '@/assets/base/icon-filter.svg?react';
+import TriangleUpIcon from '@/assets/base/icon-Triangle-Up.svg?react';
+import TriangleDownIcon from '@/assets/base/icon-Triangle-Down.svg?react';
 
 const SUBJECTS = ['개념학습', '응용/활용', '프로젝트', '챌린지', '자격증/시험', '취업/코테', '기타', '특강'];
 const DIFFICULTIES = ['초급', '중급', '고급'];
@@ -41,24 +42,86 @@ function FilterRow({ label, children }: { label: string; children: React.ReactNo
   );
 }
 
+function Pagination({ page, totalPages, onChange }: { page: number; totalPages: number; onChange: (p: number) => void }) {
+  if (totalPages <= 1) return null;
+
+  const delta = 2;
+  const left = Math.max(1, page - delta);
+  const right = Math.min(totalPages, page + delta);
+  const pages: number[] = [];
+  for (let i = left; i <= right; i++) pages.push(i);
+
+  const btnBase = 'w-9 h-9 flex items-center justify-center rounded-full text-base transition-colors';
+
+  return (
+    <div className="flex justify-center items-center gap-1 mt-10">
+      <button
+        onClick={() => onChange(page - 1)}
+        disabled={page === 1}
+        className={`${btnBase} text-gray-500 disabled:opacity-30`}
+      >
+        &lt;
+      </button>
+
+      {left > 1 && (
+        <button onClick={() => onChange(1)} className={`${btnBase} text-surface hover:bg-gray-100`}>1</button>
+      )}
+      {left > 2 && <span className="w-9 h-9 flex items-center justify-center text-gray-500">…</span>}
+
+      {pages.map((p) => (
+        <button
+          key={p}
+          onClick={() => onChange(p)}
+          className={`${btnBase} ${p === page ? 'bg-primary text-background font-bold' : 'text-surface hover:bg-gray-100'}`}
+        >
+          {p}
+        </button>
+      ))}
+
+      {right < totalPages - 1 && <span className="w-9 h-9 flex items-center justify-center text-gray-500">…</span>}
+      {right < totalPages && (
+        <button onClick={() => onChange(totalPages)} className={`${btnBase} text-surface hover:bg-gray-100`}>{totalPages}</button>
+      )}
+
+      <button
+        onClick={() => onChange(page + 1)}
+        disabled={page === totalPages}
+        className={`${btnBase} text-gray-500 disabled:opacity-30`}
+      >
+        &gt;
+      </button>
+    </div>
+  );
+}
+
 export default function Search() {
   const navigate = useNavigate();
   const [searchParams] = useSearchParams();
+  const location = useLocation();
   const initialQuery = searchParams.get('q') || '';
+  const initialType = location.pathname.startsWith('/local') ? '내지역'
+    : location.pathname.startsWith('/online') ? '온라인' : '';
+
+  const initialSubject = searchParams.get('subject') || '';
 
   const [inputValue, setInputValue] = useState(initialQuery);
   const [query, setQuery] = useState(initialQuery);
   const [filterOpen, setFilterOpen] = useState(false);
 
-  const [subjects, setSubjects] = useState<string[]>([]);
+  const [subjects, setSubjects] = useState<string[]>(initialSubject ? [initialSubject] : []);
   const [difficulties, setDifficulties] = useState<string[]>([]);
   const [days, setDays] = useState<string[]>([]);
-  const [types, setTypes] = useState<string[]>([]);
+  const [types, setTypes] = useState<string[]>(initialType ? [initialType] : []);
   const [statuses, setStatuses] = useState<string[]>([]);
 
   const [studies, setStudies] = useState<Study[]>([]);
   const [isLoading, setIsLoading] = useState(false);
   const [searched, setSearched] = useState(false);
+  const [page, setPage] = useState(1);
+  const [totalCount, setTotalCount] = useState(0);
+  const [pageSize, setPageSize] = useState(12);
+
+  const totalPages = Math.ceil(totalCount / pageSize);
 
   const fetchResults = async (params: {
     q: string;
@@ -67,6 +130,7 @@ export default function Search() {
     days: string[];
     types: string[];
     statuses: string[];
+    page: number;
   }) => {
     setIsLoading(true);
     setSearched(true);
@@ -78,27 +142,38 @@ export default function Search() {
       params.days.forEach((d) => urlParams.append('study_day', String(DAY_MAP[d])));
       if (params.types.length === 1) urlParams.append('offline', params.types[0] === '내지역' ? '1' : '0');
       params.statuses.forEach((s) => urlParams.append('study_status', String(STATUS_MAP[s])));
+      urlParams.append('page', String(params.page));
 
-      const res = await axiosInstance.get('/study/', { params: urlParams });
-      const data = res.data.results ?? res.data;
-      const raw = Array.isArray(data) ? data : [];
+      const res = await getStudies(Object.fromEntries(urlParams));
+      const raw = res.results ?? [];
+      setTotalCount(res.count ?? 0);
+      if (res.count && raw.length > 0) setPageSize(raw.length);
       setStudies(raw.map(normalizeStudy));
     } catch {
       setStudies([]);
+      setTotalCount(0);
     } finally {
       setIsLoading(false);
     }
   };
 
   useEffect(() => {
-    if (initialQuery) {
-      fetchResults({ q: initialQuery, subjects: [], difficulties: [], days: [], types: [], statuses: [] });
+    setInputValue(initialQuery);
+    setQuery(initialQuery);
+    const t = initialType ? [initialType] : [];
+    setTypes(t);
+    const s = initialSubject ? [initialSubject] : [];
+    setSubjects(s);
+    setPage(1);
+    if (initialQuery || initialSubject) {
+      fetchResults({ q: initialQuery, subjects: s, difficulties: [], days: [], types: t, statuses: [], page: 1 });
     }
-  }, []);
+  }, [initialQuery, initialType, initialSubject]);
 
   const handleSearch = () => {
     setQuery(inputValue);
-    fetchResults({ q: inputValue, subjects, difficulties, days, types, statuses });
+    setPage(1);
+    fetchResults({ q: inputValue, subjects, difficulties, days, types, statuses, page: 1 });
   };
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
@@ -119,7 +194,14 @@ export default function Search() {
 
   const handleApplyFilter = () => {
     setFilterOpen(false);
-    fetchResults({ q: query, subjects, difficulties, days, types, statuses });
+    setPage(1);
+    fetchResults({ q: query, subjects, difficulties, days, types, statuses, page: 1 });
+  };
+
+  const handlePageChange = (p: number) => {
+    setPage(p);
+    fetchResults({ q: query, subjects, difficulties, days, types, statuses, page: p });
+    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   return (
@@ -127,7 +209,7 @@ export default function Search() {
       {/* 검색바 */}
       <div className="flex items-center gap-3 py-4 md:hidden">
         <button onClick={() => navigate(-1)} className="shrink-0 p-1">
-          <img src={leftIcon} alt="뒤로" className="w-6 h-6" />
+          <LeftIcon className="w-6 h-6" />
         </button>
         <div className="flex-1 flex items-center h-11 px-4 border-2 border-gray-300 rounded-full gap-2 bg-background">
           <input
@@ -139,32 +221,28 @@ export default function Search() {
             className="flex-1 text-sm outline-none bg-transparent text-surface placeholder:text-gray-500"
           />
           <button onClick={handleSearch}>
-            <img src={searchIcon} alt="검색" className="w-5 h-5 shrink-0" />
+            <SearchIcon className="w-5 h-5 shrink-0" />
           </button>
         </div>
       </div>
 
       {/* 필터 토글 버튼 */}
-      <div className="flex justify-end mb-3 md:-mx-8 md:w-[calc(100%+64px)]">
+      <div className="flex justify-end mb-3">
         <button
           onClick={() => setFilterOpen((v) => !v)}
-          className={`flex items-center gap-1.5 px-3 w-[160px] h-[40px] rounded-[8px] bg-background text-base font-medium text-gray-700 transition-colors ${
-            filterOpen ? 'border-2 border-primary-light' : 'border border-gray-300'
+          className={`flex items-center gap-1.5 px-3 w-[170px] h-[40px] rounded-[8px] bg-background text-base font-medium text-gray-700 transition-colors ${
+            filterOpen ? 'border border-primary' : 'border border-gray-300'
           }`}
         >
-          <img src={filterIcon} alt="" className="w-5 h-5" />
+          <FilterIcon className="w-5 h-5" />
           <span>검색 필터</span>
-          <img
-            src={filterOpen ? triangleUpIcon : triangleDownIcon}
-            alt=""
-            className="w-[18px] h-[18px] ml-auto"
-          />
+            {filterOpen ? <TriangleUpIcon className="w-[18px] h-[18px] ml-auto" /> : <TriangleDownIcon className="w-[18px] h-[18px] ml-auto" />}
         </button>
       </div>
 
       {/* 필터 패널 */}
       {filterOpen && (
-        <div className="border border-gray-300 rounded-[12px] p-[14px] mb-6 bg-background h-auto md:h-[360px] md:overflow-hidden md:-mx-8 md:w-[calc(100%+64px)] md:pt-[10px] md:pl-[30px] md:pb-[30px] md:mb-[30px]">
+        <div className="border border-gray-300 rounded-[12px] p-[14px] mb-6 bg-background h-[460px] overflow-hidden md:h-[360px] md:pt-[10px] md:pl-[30px] md:pb-[30px] md:mb-[30px]">
           <FilterRow label="주제">
             {SUBJECTS.map((s) => (
               <Chip key={s} label={s} selected={subjects.includes(s)} onClick={() => toggle(subjects, setSubjects, s)} />
@@ -224,28 +302,42 @@ export default function Search() {
       {/* 검색 결과 */}
       {searched && (
         <>
-          <h2 className="text-xl font-bold mb-4">
-            <span className="text-primary">{query}</span> 검색결과
+          <h2 className="text-3xl font-bold mb-4">
+            {query ? (
+              <><span className="text-primary">{query}</span> 검색결과</>
+            ) : subjects.length > 0 ? (
+              <><span className="text-primary">{subjects[0]}</span> 카테고리 검색결과</>
+            ) : (
+              <>검색결과</>
+            )}
           </h2>
 
           {isLoading ? (
             <p className="text-center text-gray-500 py-16">검색 중입니다...</p>
           ) : studies.length === 0 ? (
-            <div className="flex flex-col items-center py-16 gap-4">
-              <p className="text-gray-500 text-sm">검색 결과가 없어요.</p>
+            <div className="flex flex-col items-center py-16 gap-[20px]">
+              <div className="flex flex-col items-center gap-[10px]">
+                <p className="text-xl font-bold text-gray-700 text-center">
+                  <span className="text-error">{query || subjects[0] || ''}</span>에 대한 검색결과가 없습니다.
+                </p>
+                <p className="text-lg font-regular text-gray-700 text-center">원하시는 스터디가 없나요? 스터디를 직접 만들어 보세요!</p>
+              </div>
               <button
                 onClick={() => navigate('/study/create')}
-                className="px-6 py-3 bg-primary text-background rounded-[8px] font-bold"
+                className="w-[250px] h-[50px] bg-primary text-background rounded-[8px] text-lg font-medium"
               >
                 스터디 만들기
               </button>
             </div>
           ) : (
-            <div className="grid grid-cols-2 lg:grid-cols-4 gap-[10px] md:gap-6 md:px-4">
-              {studies.map((study) => (
-                <StudyCard key={study.id} study={study} />
-              ))}
-            </div>
+            <>
+              <div className="grid grid-cols-2 md:grid-cols-4 gap-[10px] md:gap-6 md:px-4">
+                {studies.map((study) => (
+                  <StudyCard key={study.id} study={study} />
+                ))}
+              </div>
+              <Pagination page={page} totalPages={totalPages} onChange={handlePageChange} />
+            </>
           )}
         </>
       )}

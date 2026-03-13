@@ -1,10 +1,11 @@
 import { useState } from 'react';
-import personIcon from '@/assets/base/icon-person.svg'; 
 import CrownIcon from '@/assets/base/icon-crown-fill.svg?react';
 import CopyIcon from '@/assets/base/icon-copy.svg?react';
 import CheckIcon from '@/assets/base/icon-square-Check.svg?react';
+import EmptyProfileIcon from '@/assets/base/icon-empty-profile.svg?react';
 import { getFullUrl } from '@/api/upload';
 import { ChatMessage } from '@/types/chat';
+import { useModalStore } from '@/store/modalStore';
 
 interface ChatBubbleProps {
     message: ChatMessage; // 더미 props 대신 API 메시지 객체를 통째로 받음
@@ -12,12 +13,18 @@ interface ChatBubbleProps {
     isOwner?: boolean;    // 스터디장 여부
 }
 
-export default function ChatBubble({ message, isMine, isOwner }: ChatBubbleProps) {
+export default function ChatBubble({ message, isOwner }: ChatBubbleProps) {
 
     // 메시지 객체가 없을 경우를 대비한 안전 장치
     if (!message) return null;
-    
+
+    const { openModal } = useModalStore();
     const [copied, setCopied] = useState(false);
+
+    const handleProfileClick = () => {
+        const userId = message.user?.pk;
+        if (userId) openModal('user-info', userId);
+    };
     const [isExpanded, setIsExpanded] = useState(false);
 
     // API 데이터 매핑
@@ -51,52 +58,47 @@ export default function ChatBubble({ message, isMine, isOwner }: ChatBubbleProps
     };
 
     return (
-        <div className={`flex w-full mb-5 gap-3 ${isMine ? 'justify-end' : 'justify-start'}`}>
-            
-            {/* 상대방 프로필 이미지 */}
-            {!isMine && (
-                <div className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex items-center justify-center shrink-0 border border-gray-300 shadow-sm">
-                    {profileImg ? (
-                        <img 
-                            src={getFullUrl(profileImg)} 
-                            alt={`${sender} 프로필`} 
-                            className="object-cover" 
-                        />
-                    ) : (
-                        <img 
-                            src={personIcon} 
-                            alt="기본 프로필" 
-                            className= "opacity-40" 
-                        />
-                    )}
-                </div>
-            )}
+        <div className="flex w-full mb-5 gap-3 justify-start">
 
-            <div className={`flex flex-col ${isMine ? 'items-end' : 'items-start'}`}>
-                
-                {/* 이름 및 시간 */}
-                {!isMine && (
-                    <div className="flex items-center mb-1 gap-1">
-                        <span className="text-sm text-gray-700 font-regular">{sender}</span>
-                        {isOwner && (
-                            <CrownIcon className="w-4 h-4 text-warning shrink-0" />
-                        )}
-                        <span className="text-xs text-gray-500">{time}</span>
-                    </div>
+            {/* 프로필 이미지 */}
+            <button
+                onClick={handleProfileClick}
+                className="w-10 h-10 rounded-full bg-gray-300 overflow-hidden flex items-center justify-center shrink-0 border border-gray-300 shadow-sm hover:opacity-80 transition-opacity"
+            >
+                {profileImg ? (
+                    <img
+                        src={getFullUrl(profileImg)}
+                        alt={`${sender} 프로필`}
+                        className="w-full h-full object-cover"
+                    />
+                ) : (
+                    <EmptyProfileIcon className="w-full h-full" />
                 )}
+            </button>
 
-                <div>
-                    {isMine && (
-                        <span className="text-xs text-gray-500 mb-1 shrink-0">
-                            {time}
-                        </span>
+            <div className="flex flex-col items-start">
+
+                {/* 이름 및 시간 */}
+                <div className="flex items-center mb-1 gap-2">
+                    <button
+                        onClick={handleProfileClick}
+                        className="text-sm text-gray-700 font-regular gap-1 hover:underline"
+                    >
+                        {sender}
+                    </button>
+                    {isOwner && (
+                        <CrownIcon className="w-4 h-4 text-warning shrink-0" />
                     )}
+                    <span className="text-xs text-gray-500">{time}</span>
+                </div>
+
+                <div className="flex items-end gap-1 flex-row">
 
                     {/* 말풍선 본문 */}
                     <div>
-                        {/* 1. 이미지 타입인 경우 */}
+                        {/* 이미지 타입인 경우 */}
                         {message.chat_type === 'image' && message.image_url ? (
-                            <div className="max-w-[250px] rounded-[8px] overflow-hidden border border-gray-200">
+                            <div className="max-w-[440px] rounded-[8px] overflow-hidden">
                                 <img 
                                     src={getFullUrl(message.image_url)} 
                                     alt="채팅 이미지" 
@@ -104,17 +106,19 @@ export default function ChatBubble({ message, isMine, isOwner }: ChatBubbleProps
                                 />
                             </div>
                         ) : message.chat_type === 'file' && message.file_url ? (
-                            /* 2. 파일 타입인 경우 */
+                            /* 파일 타입인 경우 (수정 필요) */
                             <a 
                                 href={message.file_url} 
                                 target="_blank" 
                                 rel="noreferrer"
                                 className="flex items-center gap-2 p-3 bg-gray-100 rounded-[8px] border border-gray-300 hover:bg-gray-200 transition-colors"
                             >
-                                <span className="text-sm font-medium text-surface">📁 파일 다운로드</span>
+                                <span className="text-sm font-medium text-surface">
+                                    📁 {message.file_url.split('/').pop() || '파일 다운로드'}
+                                </span>
                             </a>
                         ) : isCode ? (
-                            /* 3. 코드형 텍스트 메시지 (기존 디자인) */
+                            /* 코드형 텍스트 메시지 (수정 필요) */
                             <div className="bg-gray-700 rounded-[8px] p-3 w-full max-w-[306px] md:max-w-full overflow-hidden">
                                 <div className="group">
                                     <div className="flex justify-between items-center ">
@@ -140,15 +144,15 @@ export default function ChatBubble({ message, isMine, isOwner }: ChatBubbleProps
                                 </div>
                             </div>
                         ) : (
-                            /* 4. 일반 텍스트 메시지 (기존 디자인) */
-                            <div className={`p-3 rounded-[8px] ${isMine ? 'bg-primary text-background' : 'bg-gray-100'}`}>
-                                <p className={`text-base font-regular leading-snug break-all ${text.includes('http') ? 'text-blue-400 underline' : ''}`}>
+                            /* 일반 텍스트 메시지 */
+                            <div className={`bg-gray-100`}>
+                                <p className={`text-base font-regular leading-snug break-all ${text.includes('http') ? 'text-primary underline' : ''}`}>
                                     {displayedText}
                                 </p>
                                 {isLongText && (
                                     <button 
                                         onClick={() => setIsExpanded(!isExpanded)}
-                                        className={`text-base font-medium underline mt-1 ${isMine ? 'text-background/70' : 'text-gray-500'}`}
+                                        className={`text-base font-medium underline mt-1 text-gray-500 hover:text-gray-700`}
                                     >
                                         {isExpanded ? '접기' : '...더보기'}
                                     </button>

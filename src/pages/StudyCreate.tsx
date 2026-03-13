@@ -13,9 +13,11 @@ import useUpload from "@/hooks/useUpload";
 import { getFullUrl } from "@/api/upload";
 import { getProfile, getMemberType } from "@/api/profile";
 import { storage } from "@/utils/storage";
+import { useModalStore } from "@/store/modalStore";
 
 export default function StudyCreate() {
   const navigate = useNavigate();
+  const { openConfirm } = useModalStore();
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [apiError, setApiError] = useState<string | null>(null);
   const { uploading, handleImageUpload } = useUpload();
@@ -133,10 +135,18 @@ export default function StudyCreate() {
       </div>
 
       {/* ── 스터디 만들기 TopBar ── */}
-      <StudyCreateTopBar isValid={isValid} isSubmitting={isSubmitting || uploading} />
+      <StudyCreateTopBar
+        isValid={isValid}
+        isSubmitting={isSubmitting || uploading}
+        onSubmitRequest={() =>
+          openConfirm('study-create', () =>
+            (document.getElementById('study-create-form') as HTMLFormElement)?.requestSubmit()
+          )
+        }
+      />
 
       {/* ── 폼 ── */}
-      <main className="max-w-[1200px] mx-auto pb-10">
+      <main className="max-w-[1190px] mx-auto pb-10">
         {apiError && (
           <div className="mx-4 mt-4 p-3 bg-error-light border border-error-border rounded-lg text-sm text-error">
             {apiError}

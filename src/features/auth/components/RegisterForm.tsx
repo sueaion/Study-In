@@ -7,6 +7,7 @@ import IconSend from '@/assets/base/icon-Send.svg?react';
 import IconAlert from'@/assets/base/icon-alert-circle.svg?react';
 import IconCheck from '@/assets/base/icon-Check-fill.svg?react';
 import IconHelp from '@/assets/base/icon-help-circle.svg?react';
+import IconClose from '@/assets/base/icon-X.svg?react';
 
 interface RegisterFormProps {
     onSuccess: () => void;
@@ -21,11 +22,14 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
     // 비밀번호 에러 상태
     const [passwordError, setPasswordError] = useState('');
     const [confirmError, setConfirmError] = useState('');
+
+    // 도움말 툴팁
+    const [showTooltip, setShowTooltip] = useState(false);
     
     // 이메일 훅
     const {
         isLoading, apiError, setApiError,
-        isDuplicateChecked, isCodeSent, isVerified,
+        isCodeSent, isVerified,
         checkDuplicate, sendVerificationCode, verifyCode,
         register,
     } = useRegister();
@@ -84,7 +88,14 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
 
     // 인증 코드 검증
     const handleVerifyCode = async () => {
-        if (code.length !== 6) return;
+        if (code.length === 0) {
+            setApiError('인증번호를 입력해 주세요.');
+            return;
+        }
+        if (code.length !== 6) {
+            setApiError('인증번호 6자리를 입력해 주세요.');
+            return;
+        }
         const success = await verifyCode(email, code);
         if (success) {
             alert('이메일 인증이 완료되었습니다.');
@@ -126,12 +137,19 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
                         className={`w-[70px] py-[10px] rounded-[8px] text-base font-medium transition-colors ${
                             email.length > 0 && !isVerified
                                 ? 'bg-primary text-background hover:bg-primary-light'
-                                : 'bg-gray-300 text-background cursor-not-allowed'   
+                                : 'bg-gray-300 text-background cursor-not-allowed'
                         }`}
                     >
                         {isVerified ? '인증됨' : (isCodeSent ? '재전송' : '인증')}
                     </button>
                 </div>
+                {/* 이메일 에러 메시지 (코드 발송 전) */}
+                {apiError && !isCodeSent && (
+                    <div className="flex items-center gap-1 mt-2 text-error text-base font-medium">
+                        <IconAlert className="w-5 h-5 text-error shrink-0" />
+                        <span>{apiError}</span>
+                    </div>
+                )}
             </div>
 
             {/* 인증번호 입력 폼 (이메일 발송 후에만 노출, 인증 완료되면 숨김) */}
@@ -151,20 +169,26 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
                             <div className="flex gap-2">
                                 <input
                                     type="text"
-                                    
                                     maxLength={6}
                                     value={code}
                                     onChange={(e) => {
                                         setCode(e.target.value);
                                         if (apiError) setApiError(null);
                                     }}
+                                    onBlur={() => {
+                                        if (!isVerified && code.length === 0) {
+                                            setApiError('이 필드는 필수 항목입니다.');
+                                        }
+                                    }}
                                     disabled={isVerified}
-                                    className={`flex-1 border rounded-[8px] border-gray-300 px-4 py-2 text-lg focus:outline-none transition-colors disabled:bg-background focus:border-primary`}
+                                    className={`flex-1 border rounded-[8px] px-4 py-2 text-lg focus:outline-none transition-colors disabled:bg-background ${
+                                        apiError ? 'border-error' : 'border-gray-300 focus:border-primary'
+                                    }`}
                                 />
                                 <button
                                     type="button"
                                     onClick={handleVerifyCode}
-                                    disabled={code.length !== 6 || isLoading || isVerified}
+                                    disabled={isLoading || isVerified}
                                     className={`w-[70px] shrink-0 rounded-[8px] py-2 text-base font-medium transition-colors ${
                                         code.length === 6 && !isVerified
                                             ? 'bg-primary text-background hover:bg-primary-light'
@@ -193,17 +217,56 @@ export default function RegisterForm({ onSuccess }: RegisterFormProps) {
                         </div>
                     </div> 
 
-                    <div className="flex items-center gap-1">
-                        <IconHelp className="w-4 h-4 text-gray-500 shrink-0" />
-                        <p className="text-sm text-gray-500 font-regular">인증코드를 받지 못하셨나요?</p> 
-                        <button 
-                            type="button" 
-                            onClick={handleSendAuth} 
-                            disabled={isVerified} 
+                    <div className="flex items-center gap-1 relative">
+                        <button
+                            type="button"
+                            onClick={() => setShowTooltip((prev) => !prev)}
+                            className="shrink-0"
+                        >
+                            <IconHelp className="w-4 h-4 text-gray-500" />
+                        </button>
+                        <p className="text-sm text-gray-500 font-regular">인증코드를 받지 못하셨나요?</p>
+                        <button
+                            type="button"
+                            onClick={handleSendAuth}
+                            disabled={isVerified}
                             className="text-sm text-primary font-bold hover:underline disabled:cursor-not-allowed disabled:hover:no-underline"
                         >
                             재전송
                         </button>
+
+                        {/* 말풍선 툴팁 */}
+                        {showTooltip && (
+                            <div className="absolute top-[calc(100%+10px)] left-0 z-50 w-[310px] rounded-[10px] p-4 drop-shadow-lg" style={{ backgroundColor: '#47494D' }}>
+                                {/* 삼각형 포인터 (위쪽) */}
+                                <svg
+                                    className="absolute -top-[10px] left-3"
+                                    width="12" height="10"
+                                    viewBox="0 0 12 10"
+                                    fill="none"
+                                >
+                                    <polygon points="0,10 12,10 6,0" fill="#47494D" />
+                                </svg>
+
+                                {/* 닫기 버튼 */}
+                                <button
+                                    type="button"
+                                    onClick={() => setShowTooltip(false)}
+                                    className="absolute top-3 right-3"
+                                >
+                                    <IconClose className="w-4 h-4 text-gray-500" />
+                                </button>
+
+                                {/* 제목 */}
+                                <p className="text-sm font-bold text-background mb-2">이메일이 수신되지 않나요? :(</p>
+
+                                {/* 본문 */}
+                                <p className="text-xs text-background leading-relaxed">
+                                    - 이메일 주소가 정확히 입력되었는지 확인해 주세요.<br />
+                                    - 스팸 메일함을 확인해 주세요.
+                                </p>
+                            </div>
+                        )}
                     </div>
 
                 </div>

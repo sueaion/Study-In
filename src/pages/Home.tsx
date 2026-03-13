@@ -7,6 +7,7 @@ import { useNavigate } from "react-router-dom";
 import { useAuthStore } from "@/store/authStore";
 import { useMyStudies } from "@/features/profile/hooks/useMyStudies";
 import { getProfile } from "@/api/profile";
+import { getStudySubjects } from "@/api/study";
 import { storage } from "@/utils/storage";
 import searchIcon from "@/assets/base/icon-Search.svg";
 import IconSpeaker from "@/assets/base/icon-speaker.svg?react";
@@ -20,36 +21,34 @@ import iconExam from "../assets/category/subject_자격증시험.svg";
 import iconJob from "../assets/category/subject_취업코테.svg";
 import iconEtc from "../assets/category/subject_기타.svg";
 
-const categories = [
-  { id: 1, name: "특강", icon: iconSpecial },
-  { id: 2, name: "개념학습", icon: iconConcept },
-  { id: 3, name: "응용/활용", icon: iconApply },
-  { id: 4, name: "프로젝트", icon: iconProject },
-  { id: 5, name: "챌린지", icon: iconChallenge },
-  { id: 6, name: "자격증/시험", icon: iconExam },
-  { id: 7, name: "취업/코테", icon: iconJob },
-  { id: 8, name: "기타", icon: iconEtc },
-];
+const CATEGORY_ICON_MAP: Record<string, string> = {
+  "특강": iconSpecial,
+  "개념학습": iconConcept,
+  "응용/활용": iconApply,
+  "프로젝트": iconProject,
+  "챌린지": iconChallenge,
+  "자격증/시험": iconExam,
+  "취업/코테": iconJob,
+  "기타": iconEtc,
+};
 
-function calcDDay(startDate?: string, endDate?: string): string {
-  const ref = endDate ?? startDate;
-  if (!ref) return "";
-  const today = new Date();
-  today.setHours(0, 0, 0, 0);
-  const target = new Date(ref);
-  target.setHours(0, 0, 0, 0);
-  const diff = Math.round((target.getTime() - today.getTime()) / (1000 * 60 * 60 * 24));
-  if (diff === 0) return "D-Day";
-  return diff > 0 ? `D-${diff}` : `D+${Math.abs(diff)}`;
-}
 
 export default function Home() {
   const [activeTab, setActiveTab] = useState("최신 스터디");
   const [profileImg, setProfileImg] = useState<string | undefined>(undefined);
   const [nickname, setNickname] = useState<string | undefined>(undefined);
+  const [categories, setCategories] = useState<{ id: number; name: string; icon: string }[]>([]);
   const navigate = useNavigate();
   const { isLoggedIn } = useAuthStore();
-  const { studies: myStudies } = useMyStudies(isLoggedIn ? '/study/my-participating-study/' : null);
+  const { studies: myStudies } = useMyStudies(isLoggedIn ? 'joined' : null);
+
+  useEffect(() => {
+    getStudySubjects()
+      .then((subjects) => {
+        setCategories(subjects.map((s) => ({ id: s.id, name: s.name, icon: CATEGORY_ICON_MAP[s.name] ?? iconEtc })));
+      })
+      .catch(() => {});
+  }, []);
 
   useEffect(() => {
     if (!isLoggedIn) return;
@@ -95,10 +94,9 @@ export default function Home() {
                       </div>
                       {/* 상태 뱃지 */}
                       <div className="flex items-center gap-1 mt-2">
-                        <IconSpeaker className={`w-4 h-4 shrink-0 ${STATUS_COLOR[study.study_status.name] ?? "text-gray-400"}`} />
-                        <span className={`text-sm font-bold ${STATUS_COLOR[study.study_status.name] ?? "text-gray-400"}`}>
-                          {study.study_status.name === "모집 중" ? "모집 중!" : study.study_status.name}
-                          {calcDDay(study.start_date, study.end_date) && ` (${calcDDay(study.start_date, study.end_date)})`}
+                        <IconSpeaker className={`w-4 h-4 shrink-0 ${STATUS_COLOR[study.status] ?? "text-gray-500"}`} />
+                        <span className={`text-sm font-bold ${STATUS_COLOR[study.status] ?? "text-gray-500"}`}>
+                          {study.status === "모집 중" ? "모집 중!" : study.status}
                         </span>
                       </div>
                       {/* 제목 */}
@@ -124,7 +122,11 @@ export default function Home() {
           </button>
           <div className="grid grid-cols-4 gap-5 mt-[30px] px-[9px]">
             {categories.map((category) => (
-              <button key={category.id} className="flex flex-col items-center gap-2">
+              <button
+                key={category.id}
+                onClick={() => navigate(`/search?subject=${encodeURIComponent(category.name)}`)}
+                className="flex flex-col items-center gap-2"
+              >
                 <div className="w-[70px] h-[70px] rounded-[12px] bg-gray-100 flex items-center justify-center">
                   <img src={category.icon} alt={category.name} className="w-[62px] h-[62px] object-contain" />
                 </div>
@@ -166,13 +168,14 @@ export default function Home() {
           <div className="flex-1 w-full">
             {isLoggedIn ? (
               <>
-                <div className="w-full">
+                <div className="w-full aspect-[880/300] bg-gray-200 rounded-[12px]">
                   <StudyBanner />
                 </div>
                 <div className="flex items-center py-4 overflow-x-auto gap-[30px] no-scrollbar pl-[80px] mt-[40px]">
                   {categories.map((category) => (
                     <button
                       key={category.id}
+                      onClick={() => navigate(`/search?subject=${encodeURIComponent(category.name)}`)}
                       className="flex flex-col items-center shrink-0 gap-3 group"
                     >
                       <div className="w-[60px] h-[60px] rounded-2xl bg-gray-50 flex items-center justify-center transition-all group-hover:bg-primary/10">
@@ -195,7 +198,7 @@ export default function Home() {
                       <button
                         key={tab}
                         onClick={() => setActiveTab(tab)}
-                        className={`px-5 py-2 rounded-full text-[14px] font-semibold transition-all ${
+                        className={`px-5 py-2 rounded-full text-base font-semibold transition-all ${
                           activeTab === tab
                             ? "bg-primary text-background shadow-sm"
                             : "bg-gray-100 text-gray-500 hover:bg-gray-200"
@@ -226,8 +229,8 @@ export default function Home() {
               studies={myStudies.map((s) => ({
                 id: s.id,
                 title: s.title,
-                status: s.study_status.name as "진행 중" | "모집 중",
-                dDay: calcDDay(s.start_date, s.end_date),
+                status: s.status as "진행 중" | "모집 중",
+                dDay: "",
                 image: s.thumbnail ?? "",
               }))}
             />
